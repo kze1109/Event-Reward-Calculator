@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>イベント出店 報酬計算</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>window.html2canvas=null;</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" onerror="console.warn('html2canvas load failed')"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -321,6 +322,24 @@
   <button class="btn-primary" id="btn-gen" onclick="generateImage()">📷 画像を生成</button>
   <button class="btn-outline" onclick="buildPrint()">🖨️ 印刷・PDF</button>
 </div>
+<button class="btn-csv" onclick="exportCSV()" style="display:block;width:100%;max-width:680px;margin:0 auto 10px;padding:13px;background:transparent;color:#3a6b4a;font-family:inherit;font-size:13px;font-weight:700;border:1.5px solid #3a6b4a;border-radius:2px;cursor:pointer;">📊 CSVで保存（Excel・スプレッドシート）</button>
+<!-- CSV Modal -->
+<div id="csv-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9000;padding:20px;overflow-y:auto;">
+  <div style="background:#fff;border-radius:4px;max-width:680px;margin:40px auto;padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div style="font-size:14px;font-weight:700;">📊 CSVデータ</div>
+      <button onclick="document.getElementById('csv-modal').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;">×</button>
+    </div>
+    <div style="font-size:11px;color:#999;margin-bottom:10px;line-height:1.6;">
+      ① 下のテキストを全選択してコピー<br>
+      ② GoogleスプレッドシートまたはExcelを開く<br>
+      ③ セルA1を選択して貼り付け
+    </div>
+    <textarea id="csv-text" readonly style="width:100%;height:200px;font-family:monospace;font-size:11px;border:1px solid #e0dcd6;border-radius:2px;padding:10px;background:#f7f5f2;box-sizing:border-box;resize:none;"></textarea>
+    <button onclick="copyCSV()" style="display:block;width:100%;margin-top:10px;padding:13px;background:#3a6b4a;color:#fff;font-family:inherit;font-size:13px;font-weight:700;border:none;border-radius:2px;cursor:pointer;">コピーする</button>
+  </div>
+</div>
+
 <button class="btn-reset" onclick="resetAll()">全てリセット</button>
 
 <!-- Snap area (off-screen) -->
@@ -363,6 +382,7 @@ function updateDay(id) {
   const dd = document.getElementById(`${id}_ddisp`);
   if (dd) dd.textContent = fmtDate(dv);
   recalcSummary();
+  saveToStorage();
 }
 
 function recalcSummary() {
@@ -617,6 +637,59 @@ function buildPrint() {
   window.print();
 }
 
+
+function exportCSV() {
+  const eventName = document.getElementById('event-name').value || 'イベント';
+  const ids = Object.keys(days);
+
+  const headers = ['イベント名','日付','参加者','レジ金','現金売上(税込)','キャッシュレス売上(税込)','送料','出店費','売上総合計(税込)','報酬金(税抜)'];
+
+  const rows = ids.map((id, i) => {
+    const r = calcDay(id);
+    const dv = document.getElementById(id+'_date')?.value || '';
+    const px = document.getElementById(id+'_pax')?.value || '';
+    const label = dv ? fmtDate(dv) : 'Day'+(i+1);
+    return [eventName, label, px, r.reg, r.cash, r.cl, r.ship, r.booth, r.sales_total, Math.round(r.reward)];
+  });
+
+  const totalReward = ids.reduce((s,id) => s + calcDay(id).reward, 0);
+  rows.push(['','','合計','','','','','','',Math.round(totalReward)]);
+
+  const csv = '\uFEFF' + [headers, ...rows]
+    .map(row => row.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(','))
+    .join('\n');
+
+  // SafariはBlob+a.clickが動かないのでdata URIで開く
+  const dataUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  const fname = eventName + '_報酬計算_' + new Date().toISOString().slice(0,10) + '.csv';
+
+  const a = document.createElement('a');
+  a.setAttribute('href', dataUri);
+  a.setAttribute('download', fname);
+  a.setAttribute('target', '_blank');
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  showToast('ダウンロードフォルダを確認してください');
+}
+
+function copyCSV() {
+  const ta = document.getElementById('csv-text');
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showToast('コピーしました！スプレッドシートに貼り付けてください');
+  } catch(e) {
+    // フォールバック
+    navigator.clipboard.writeText(ta.value).then(() => {
+      showToast('コピーしました！スプレッドシートに貼り付けてください');
+    }).catch(() => {
+      showToast('長押しして「すべてを選択」→「コピー」してください');
+    });
+  }
+}
+
 function resetAll() {
   if (!confirm('全てリセットしますか？')) return;
   document.getElementById('event-name').value = '';
@@ -625,6 +698,7 @@ function resetAll() {
   dayCount = 0;
   document.getElementById('img-preview').classList.remove('show');
   window._imgDataUrl = null;
+  localStorage.removeItem('eventCalcData');
   recalcSummary();
   addDay();
 }
@@ -636,8 +710,53 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
+// ── localStorage 保存・復元 ──────────────────────────────
+function saveToStorage() {
+  try {
+    const data = {
+      eventName: document.getElementById('event-name').value,
+      days: Object.keys(days).map(id => ({
+        date:     document.getElementById(id+'_date')?.value  || '',
+        pax:      document.getElementById(id+'_pax')?.value   || '',
+        register: document.getElementById(id+'_reg')?.value   || '',
+        cash:     document.getElementById(id+'_cash')?.value  || '',
+        cl:       document.getElementById(id+'_cl')?.value    || '',
+        ship:     document.getElementById(id+'_ship')?.value  || '',
+        booth:    document.getElementById(id+'_booth')?.value || '',
+      }))
+    };
+    localStorage.setItem('eventCalcData', JSON.stringify(data));
+  } catch(e) {}
+}
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem('eventCalcData');
+    if (!raw) { addDay(); return; }
+    const data = JSON.parse(raw);
+
+    document.getElementById('event-name').value = data.eventName || '';
+
+    const dayList = data.days && data.days.length > 0 ? data.days : [{}];
+    dayList.forEach(d => {
+      addDay();
+      const id = 'd' + dayCount;
+      if (d.date)     document.getElementById(id+'_date').value  = d.date;
+      if (d.pax)      document.getElementById(id+'_pax').value   = d.pax;
+      if (d.register) document.getElementById(id+'_reg').value   = d.register;
+      if (d.cash)     document.getElementById(id+'_cash').value  = d.cash;
+      if (d.cl)       document.getElementById(id+'_cl').value    = d.cl;
+      if (d.ship)     document.getElementById(id+'_ship').value  = d.ship;
+      if (d.booth)    document.getElementById(id+'_booth').value = d.booth;
+      updateDay(id);
+    });
+  } catch(e) {
+    addDay();
+  }
+}
+
 // init
-addDay();
+loadFromStorage();
 </script>
 </body>
 </html>
