@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>イベント出店 報酬計算</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink: #1a1a1a;
+    --soft: #555;
+    --faint: #999;
+    --bg: #f7f5f2;
+    --card: #ffffff;
+    --rule: #e0dcd6;
+    --accent: #c8a96e;
+    --reward: #3a6b4a;
+    --reward-bg: #e8f0ea;
+  }
+
+  body {
+    font-family: 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 28px 14px 80px;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* ── Header ── */
+  .header {
+    max-width: 680px;
+    margin: 0 auto 24px;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 14px;
+  }
+  .header .eye { font-size: 9px; letter-spacing: .2em; text-transform: uppercase; color: var(--faint); margin-bottom: 5px; }
+  .header h1  { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+
+  /* ── Card ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    max-width: 680px;
+    margin: 0 auto 14px;
+    overflow: hidden;
+  }
+
+  .card-body { padding: 18px 18px; }
+
+  .sec-label {
+    font-size: 9px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--faint); margin-bottom: 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  /* ── Day header ── */
+  .day-head {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--ink); color: #fff; padding: 12px 16px;
+  }
+  .day-head .dh-title { font-size: 13px; font-weight: 700; }
+  .day-head .dh-date  { font-size: 11px; opacity: .6; margin-top: 2px; }
+  .btn-del {
+    background: none; border: none; color: rgba(255,255,255,.4);
+    font-size: 22px; line-height: 1; cursor: pointer; padding: 0 0 0 10px;
+  }
+
+  /* ── Grid ── */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 12px;
+    margin-bottom: 14px;
+  }
+  .span2 { grid-column: 1 / -1; }
+
+  /* ── Field ── */
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 10px; font-weight: 600; color: var(--soft); letter-spacing: .03em; }
+
+  input[type="text"],
+  input[type="date"] {
+    font-family: inherit; font-size: 14px;
+    border: 1px solid var(--rule); border-radius: 2px;
+    padding: 9px 10px; background: var(--bg); color: var(--ink);
+    width: 100%; outline: none; -webkit-appearance: none; appearance: none;
+    transition: border-color .15s, background .15s;
+  }
+
+  .yen-wrap { position: relative; }
+  .yen-wrap::before {
+    content: '¥'; position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+    font-size: 11px; color: var(--faint); pointer-events: none;
+  }
+  .yen-wrap input {
+    font-family: 'Courier New', monospace; font-size: 14px;
+    border: 1px solid var(--rule); border-radius: 2px;
+    padding: 9px 10px 9px 22px; background: var(--bg); color: var(--ink);
+    width: 100%; outline: none; -webkit-appearance: none; appearance: none;
+    transition: border-color .15s, background .15s;
+  }
+
+  input:focus { border-color: var(--accent) !important; background: #fff !important; }
+
+  /* ── Result chips ── */
+  .chips { display: flex; gap: 8px; border-top: 1px solid var(--rule); padding-top: 12px; }
+  .chip {
+    flex: 1; padding: 9px 10px; background: var(--bg); border-radius: 2px;
+    min-width: 0;
+  }
+  .chip.green { background: var(--reward-bg); border: 1px solid var(--reward); }
+  .chip .c-label { font-size: 9px; color: var(--faint); margin-bottom: 3px; line-height: 1.4; }
+  .chip.green .c-label { color: var(--reward); }
+  .chip .c-val  { font-family: 'Courier New', monospace; font-size: 14px; font-weight: 600; }
+  .chip.green .c-val { color: var(--reward); font-size: 16px; font-weight: 700; }
+
+  /* ── Summary table ── */
+  .sum-table {
+    width: 100%; border-collapse: collapse; font-size: 12px;
+    background: var(--card); border: 1px solid var(--rule);
+  }
+  .sum-table thead tr { background: var(--ink); color: #fff; }
+  .sum-table th { padding: 8px 10px; font-size: 9px; font-weight: 600; letter-spacing: .05em; text-align: right; }
+  .sum-table th:first-child { text-align: left; }
+  .sum-table td { padding: 9px 10px; border-bottom: 1px solid var(--rule); text-align: right; font-family: 'Courier New', monospace; }
+  .sum-table td:first-child, .sum-table td:nth-child(2) { font-family: inherit; text-align: left; font-size: 12px; }
+  .sum-table tr:last-child td { border-bottom: none; }
+  .td-reward { color: var(--reward); font-weight: 700; }
+
+  .total-box {
+    background: var(--reward-bg); border: 1.5px solid var(--reward);
+    border-radius: 2px; padding: 14px 18px;
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 10px; max-width: 680px; margin-left: auto; margin-right: auto;
+  }
+  .total-box .tb-label { font-size: 13px; font-weight: 700; color: var(--reward); }
+  .total-box .tb-sub   { font-size: 9px; color: var(--reward); opacity: .7; margin-top: 2px; }
+  .total-box .tb-val   { font-family: 'Courier New', monospace; font-size: 24px; font-weight: 700; color: var(--reward); }
+
+  /* ── Buttons ── */
+  .btn-add {
+    display: block; width: 100%; max-width: 680px; margin: 0 auto 20px;
+    padding: 13px; background: transparent; color: var(--soft);
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    border: 1.5px dashed var(--rule); border-radius: 2px; cursor: pointer;
+  }
+
+  .actions {
+    max-width: 680px; margin: 20px auto 10px;
+    display: flex; gap: 10px;
+  }
+
+  .btn-primary {
+    flex: 1; padding: 14px; background: var(--ink); color: #fff;
+    font-family: inherit; font-size: 13px; font-weight: 700;
+    border: none; border-radius: 2px; cursor: pointer;
+  }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+  .btn-outline {
+    flex: 1; padding: 14px; background: transparent; color: var(--ink);
+    font-family: inherit; font-size: 13px; font-weight: 700;
+    border: 1.5px solid var(--ink); border-radius: 2px; cursor: pointer;
+  }
+
+  .btn-reset {
+    display: block; width: 100%; max-width: 680px; margin: 0 auto;
+    padding: 11px; background: transparent; color: var(--faint);
+    font-family: inherit; font-size: 12px;
+    border: 1px solid var(--rule); border-radius: 2px; cursor: pointer;
+  }
+
+  /* ── Image preview ── */
+  #img-preview {
+    display: none; max-width: 680px; margin: 0 auto 14px;
+    background: var(--card); border: 1px solid var(--rule); border-radius: 2px;
+    padding: 14px;
+  }
+  #img-preview.show { display: block; }
+  #img-preview .prev-note {
+    font-size: 11px; color: var(--faint); margin-bottom: 10px; line-height: 1.5;
+  }
+  #img-preview img { width: 100%; border-radius: 2px; display: block; }
+  #btn-download {
+    display: block; width: 100%; margin-top: 10px; padding: 12px;
+    background: var(--reward); color: #fff;
+    font-family: inherit; font-size: 13px; font-weight: 700;
+    border: none; border-radius: 2px; cursor: pointer;
+  }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(16px);
+    background: var(--ink); color: #fff; font-size: 13px;
+    padding: 11px 22px; border-radius: 2px; opacity: 0;
+    transition: all .3s; pointer-events: none; white-space: nowrap; z-index: 9999;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── Print report (hidden normally) ── */
+  @media print {
+    body > *:not(#print-area) { display: none !important; }
+    #print-area { display: block !important; }
+    @page { margin: 12mm; }
+  }
+  #print-area { display: none; }
+
+  /* ── Snapshot target ── */
+  #snap-area {
+    position: fixed; left: -9999px; top: 0;
+    width: 600px; padding: 32px;
+    background: var(--bg);
+    font-family: 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+    color: var(--ink);
+  }
+  .snap-head { border-bottom: 2px solid var(--ink); padding-bottom: 12px; margin-bottom: 18px; }
+  .snap-head .s-eye { font-size: 9px; letter-spacing: .2em; text-transform: uppercase; color: var(--faint); margin-bottom: 4px; }
+  .snap-head .s-title { font-size: 20px; font-weight: 700; }
+
+  .snap-day { margin-bottom: 14px; border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; page-break-inside: avoid; }
+  .snap-day-head { background: var(--ink); color: #fff; padding: 10px 14px; }
+  .snap-day-head .sdh-title { font-size: 13px; font-weight: 700; }
+  .snap-day-head .sdh-pax   { font-size: 10px; opacity: .65; margin-top: 2px; }
+  .snap-day-body { padding: 12px 14px; background: #fff; }
+
+  .srow {
+    display: flex; justify-content: space-between;
+    font-size: 11px; padding: 3px 0; border-bottom: 1px solid #f0ede8;
+  }
+  .srow:last-child { border-bottom: none; }
+  .srow .sl { color: var(--soft); }
+  .srow .sv { font-family: 'Courier New', monospace; font-weight: 500; }
+
+  .sdiv { border-top: 1px solid #ccc; margin: 6px 0 4px; }
+
+  .srow.bold .sl { color: var(--ink); font-weight: 600; }
+  .srow.reward .sl, .srow.reward .sv { color: var(--reward); font-weight: 700; }
+  .srow.reward .sv { font-size: 13px; }
+  .srow.reward { background: var(--reward-bg); padding: 4px 4px; margin: 2px -4px; }
+
+  .snap-total {
+    background: var(--reward-bg); border: 1.5px solid var(--reward); border-radius: 2px;
+    padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;
+    margin-top: 14px;
+  }
+  .snap-total .st-l { font-size: 13px; font-weight: 700; color: var(--reward); }
+  .snap-total .st-v { font-family: 'Courier New', monospace; font-size: 22px; font-weight: 700; color: var(--reward); }
+
+  .snap-foot { margin-top: 14px; font-size: 9px; color: var(--faint); text-align: right; border-top: 1px solid var(--rule); padding-top: 8px; }
+
+  @media (max-width: 480px) {
+    .grid { grid-template-columns: 1fr; }
+    .span2 { grid-column: 1; }
+    .chips { flex-direction: column; }
+    .actions { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="eye">Event Management Tool</div>
+  <h1>イベント出店 報酬計算</h1>
+</div>
+
+<!-- Event name -->
+<div class="card">
+  <div class="card-body">
+    <div class="sec-label">イベント共通情報</div>
+    <div class="field">
+      <label>イベント名</label>
+      <input type="text" id="event-name" placeholder="例：○○マルシェ">
+    </div>
+  </div>
+</div>
+
+<!-- Days -->
+<div id="days-wrap"></div>
+<button class="btn-add" onclick="addDay()">＋ 日程を追加</button>
+
+<!-- Summary -->
+<div class="card" id="summary-card" style="display:none">
+  <div class="card-body">
+    <div class="sec-label">全日程サマリー</div>
+    <table class="sum-table">
+      <thead>
+        <tr>
+          <th style="text-align:left">日付</th>
+          <th style="text-align:left">参加者</th>
+          <th>売上合計</th>
+          <th>出店費</th>
+          <th>報酬金</th>
+        </tr>
+      </thead>
+      <tbody id="sum-body"></tbody>
+    </table>
+  </div>
+</div>
+<div class="total-box" id="total-box" style="display:none">
+  <div>
+    <div class="tb-label">全日程 報酬金合計</div>
+    <div class="tb-sub">各日の報酬金（税抜）の合計</div>
+  </div>
+  <div class="tb-val" id="total-val">¥0</div>
+</div>
+
+<!-- Image preview -->
+<div id="img-preview">
+  <div class="prev-note">📷 スマホ：画像を長押し → 「写真に追加」または「ファイルに保存」<br>PC：右クリック → 「名前を付けて画像を保存」</div>
+  <img id="prev-img" src="" alt="レポート">
+  <button id="btn-download" onclick="downloadImg()">⬇️ PNGでダウンロード</button>
+</div>
+
+<!-- Actions -->
+<div class="actions">
+  <button class="btn-primary" id="btn-gen" onclick="generateImage()">📷 画像を生成</button>
+  <button class="btn-outline" onclick="window.print()">🖨️ 印刷・PDF</button>
+</div>
+<button class="btn-reset" onclick="resetAll()">全てリセット</button>
+
+<!-- Snap area (off-screen) -->
+<div id="snap-area"></div>
+
+<!-- Print area -->
+<div id="print-area"></div>
+
+<div id="toast"></div>
+
+<script>
+let dayCount = 0;
+const days = {};
+
+const fmt = n => '¥' + Math.max(0, Math.round(n)).toLocaleString('ja-JP');
+
+const fmtDate = s => {
+  if (!s) return '';
+  const [y,m,d] = s.split('-');
+  return `${y}年${parseInt(m)}月${parseInt(d)}日`;
+};
+
+function calcDay(id) {
+  const g = k => parseFloat(document.getElementById(`${id}_${k}`)?.value) || 0;
+  const reg = g('reg'), cash = g('cash'), cl = g('cl'), ship = g('ship'), booth = g('booth');
+  return {
+    reg, cash, cl, ship, booth,
+    cash_total:  reg + cash + ship,
+    sales_total: cash + cl,
+    reward:      Math.max(0, (cash + cl - booth) * 0.3 / 1.1)
+  };
+}
+
+function updateDay(id) {
+  const r = calcDay(id);
+  document.getElementById(`${id}_r1`).textContent = fmt(r.cash_total);
+  document.getElementById(`${id}_r2`).textContent = fmt(r.sales_total);
+  document.getElementById(`${id}_r3`).textContent = fmt(r.reward);
+  const dv = document.getElementById(`${id}_date`)?.value || '';
+  const dd = document.getElementById(`${id}_ddisp`);
+  if (dd) dd.textContent = fmtDate(dv);
+  recalcSummary();
+}
+
+function recalcSummary() {
+  const ids = Object.keys(days);
+  let total = 0;
+  const rows = ids.map((id, i) => {
+    const r = calcDay(id);
+    total += r.reward;
+    const dv = document.getElementById(`${id}_date`)?.value || '';
+    const px = document.getElementById(`${id}_pax`)?.value || '';
+    return { label: dv ? fmtDate(dv) : `Day ${i+1}`, px, ...r };
+  });
+
+  const hasDays = ids.length > 0;
+  document.getElementById('summary-card').style.display = hasDays ? 'block' : 'none';
+  document.getElementById('total-box').style.display    = hasDays ? 'flex'  : 'none';
+
+  const tbody = document.getElementById('sum-body');
+  tbody.innerHTML = rows.map(row => `
+    <tr>
+      <td style="font-family:inherit">${row.label}</td>
+      <td style="font-family:inherit;color:#555">${row.px || '—'}</td>
+      <td>${fmt(row.sales_total)}</td>
+      <td>${fmt(row.booth)}</td>
+      <td class="td-reward">${fmt(row.reward)}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('total-val').textContent = fmt(total);
+}
+
+function addDay() {
+  dayCount++;
+  const id = `d${dayCount}`;
+  days[id] = true;
+
+  const div = document.createElement('div');
+  div.id = `card_${id}`;
+  div.className = 'card';
+  div.innerHTML = `
+    <div class="day-head">
+      <div>
+        <div class="dh-title">Day ${dayCount}</div>
+        <div class="dh-date" id="${id}_ddisp"></div>
+      </div>
+      ${Object.keys(days).length > 1 ? `<button class="btn-del" onclick="removeDay('${id}')">×</button>` : ''}
+    </div>
+    <div class="card-body">
+      <div class="grid">
+        <div class="field span2" style="grid-template-columns:1fr 1fr;display:grid;gap:10px 12px;grid-column:1/-1">
+          <div class="field">
+            <label>日付</label>
+            <input type="date" id="${id}_date" oninput="updateDay('${id}')">
+          </div>
+          <div class="field">
+            <label>参加者</label>
+            <input type="text" id="${id}_pax" placeholder="例：田中、佐藤" oninput="updateDay('${id}')">
+          </div>
+        </div>
+        <div class="field">
+          <label>レジ金</label>
+          <div class="yen-wrap"><input type="number" id="${id}_reg" min="0" placeholder="0" oninput="updateDay('${id}')"></div>
+        </div>
+        <div class="field">
+          <label>現金売上（税込）</label>
+          <div class="yen-wrap"><input type="number" id="${id}_cash" min="0" placeholder="0" oninput="updateDay('${id}')"></div>
+        </div>
+        <div class="field">
+          <label>キャッシュレス売上（税込）</label>
+          <div class="yen-wrap"><input type="number" id="${id}_cl" min="0" placeholder="0" oninput="updateDay('${id}')"></div>
+        </div>
+        <div class="field">
+          <label>送料</label>
+          <div class="yen-wrap"><input type="number" id="${id}_ship" min="0" placeholder="0" oninput="updateDay('${id}')"></div>
+        </div>
+        <div class="field">
+          <label>出店費</label>
+          <div class="yen-wrap"><input type="number" id="${id}_booth" min="0" placeholder="0" oninput="updateDay('${id}')"></div>
+        </div>
+      </div>
+      <div class="chips">
+        <div class="chip">
+          <div class="c-label">① 現金確認<br>（レジ＋現金＋送料）</div>
+          <div class="c-val" id="${id}_r1">¥0</div>
+        </div>
+        <div class="chip">
+          <div class="c-label">② 売上総合計（税込）<br>（現金＋キャッシュレス）</div>
+          <div class="c-val" id="${id}_r2">¥0</div>
+        </div>
+        <div class="chip green">
+          <div class="c-label">③ 報酬金（税抜）<br>（売上−出店費）×30%÷1.1</div>
+          <div class="c-val" id="${id}_r3">¥0</div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('days-wrap').appendChild(div);
+  recalcSummary();
+}
+
+function removeDay(id) {
+  delete days[id];
+  document.getElementById(`card_${id}`).remove();
+  recalcSummary();
+}
+
+// ── Snapshot builder ──────────────────────────────────────────────────────
+function buildSnap() {
+  const name = document.getElementById('event-name').value || 'イベント名未入力';
+  const ids  = Object.keys(days);
+  let total  = 0;
+
+  const dayHTML = ids.map((id, i) => {
+    const r  = calcDay(id);
+    total   += r.reward;
+    const dv = document.getElementById(`${id}_date`)?.value || '';
+    const px = document.getElementById(`${id}_pax`)?.value  || '';
+    const lbl = dv ? fmtDate(dv) : `Day ${i+1}`;
+    return `
+      <div class="snap-day">
+        <div class="snap-day-head">
+          <div class="sdh-title">${lbl}</div>
+          ${px ? `<div style="font-size:11px;color:#cccccc;margin-top:4px;font-weight:500;">参加者：${px}</div>` : ''}
+        </div>
+        <div class="snap-day-body">
+          ${px ? `<div class="srow" style="background:#f5f5f5"><span class="sl" style="font-weight:600;color:#1a1a1a;">参加者</span><span class="sv" style="font-family:inherit;color:#1a1a1a;">${px}</span></div>` : ""}<div class="srow"><span class="sl">レジ金</span><span class="sv">${fmt(r.reg)}</span></div>
+          <div class="srow"><span class="sl">現金売上（税込）</span><span class="sv">${fmt(r.cash)}</span></div>
+          <div class="srow"><span class="sl">キャッシュレス売上（税込）</span><span class="sv">${fmt(r.cl)}</span></div>
+          <div class="srow"><span class="sl">送料</span><span class="sv">${fmt(r.ship)}</span></div>
+          <div class="srow"><span class="sl">出店費</span><span class="sv">${fmt(r.booth)}</span></div>
+          <div class="sdiv"></div>
+          <div class="srow bold"><span class="sl">① 現金確認（レジ＋現金＋送料）</span><span class="sv">${fmt(r.cash_total)}</span></div>
+          <div class="srow bold"><span class="sl">② 売上総合計（税込）（現金＋キャッシュレス）</span><span class="sv">${fmt(r.sales_total)}</span></div>
+          <div class="srow reward"><span class="sl">③ 報酬金（税抜）（売上−出店費）×30%÷1.1</span><span class="sv">${fmt(r.reward)}</span></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const now = new Date();
+  const ts  = `${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+  document.getElementById('snap-area').innerHTML = `
+    <div class="snap-head">
+      <div class="s-eye">Event Reward Report</div>
+      <div class="s-title">${name}</div>
+    </div>
+    ${dayHTML}
+    <div class="snap-total">
+      <div class="st-l">全日程 報酬金合計</div>
+      <div class="st-v">${fmt(total)}</div>
+    </div>
+    <div class="snap-foot">出力日時：${ts}</div>
+  `;
+}
+
+// ── Image generation ──────────────────────────────────────────────────────
+function generateImage() {
+  if (typeof html2canvas === 'undefined') {
+    showToast('html2canvasが読み込まれていません。ネット接続を確認してください。');
+    return;
+  }
+
+  const btn = document.getElementById('btn-gen');
+  btn.disabled = true;
+  btn.textContent = '生成中…';
+
+  buildSnap();
+
+  const el = document.getElementById('snap-area');
+  el.style.left = '-9999px';
+
+  setTimeout(() => {
+    html2canvas(el, {
+      scale: 2,
+      backgroundColor: '#f7f5f2',
+      useCORS: true,
+      logging: false,
+      width: 600,
+      windowWidth: 664,
+    }).then(canvas => {
+      const dataUrl = canvas.toDataURL('image/png');
+      document.getElementById('prev-img').src = dataUrl;
+      document.getElementById('img-preview').classList.add('show');
+      document.getElementById('img-preview').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      btn.disabled = false;
+      btn.textContent = '📷 画像を生成';
+      showToast('画像を生成しました');
+      window._imgDataUrl = dataUrl;
+    }).catch(err => {
+      console.error(err);
+      btn.disabled = false;
+      btn.textContent = '📷 画像を生成';
+      showToast('生成に失敗しました');
+    });
+  }, 300);
+}
+
+function downloadImg() {
+  if (!window._imgDataUrl) return;
+  const name = document.getElementById('event-name').value || 'event';
+  const a = document.createElement('a');
+  a.href = window._imgDataUrl;
+  a.download = `${name}_報酬計算_${new Date().toISOString().slice(0,10)}.png`;
+  a.click();
+}
+
+// ── Print ─────────────────────────────────────────────────────────────────
+function buildPrint() {
+  const name = document.getElementById('event-name').value || 'イベント名未入力';
+  const ids  = Object.keys(days);
+  let total  = 0;
+  const body = ids.map((id, i) => {
+    const r = calcDay(id);
+    total  += r.reward;
+    const dv = document.getElementById(`${id}_date`)?.value || '';
+    const px = document.getElementById(`${id}_pax`)?.value  || '';
+    return `
+      <div style="margin-bottom:14px;border:1px solid #e0dcd6;border-radius:2px;overflow:hidden">
+        <div style="background:#1a1a1a;color:#fff;padding:10px 14px">
+          <b style="font-size:13px">${dv ? fmtDate(dv) : `Day ${i+1}`}</b>
+          ${px ? `<div style="font-size:11px;color:#cccccc;margin-top:4px;">参加者：${px}</div>` : ''}
+        </div>
+        <div style="padding:12px 14px;background:#fff;font-size:11px">
+          ${[['レジ金',r.reg],['現金売上（税込）',r.cash],['キャッシュレス売上（税込）',r.cl],['送料',r.ship],['出店費',r.booth]].map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #f0ede8"><span style="color:#666">${l}</span><span style="font-family:monospace">${fmt(v)}</span></div>`).join('')}
+          <hr style="border:none;border-top:1px solid #ccc;margin:6px 0">
+          <div style="display:flex;justify-content:space-between;padding:2px 0"><span>① 現金確認</span><span style="font-family:monospace">${fmt(r.cash_total)}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:2px 0"><span>② 売上総合計</span><span style="font-family:monospace">${fmt(r.sales_total)}</span></div>
+          <div style="display:flex;justify-content:space-between;padding:4px;background:#e8f0ea;margin:4px -4px;font-weight:bold;color:#3a6b4a"><span>③ 報酬金（税抜）</span><span style="font-family:monospace;font-size:13px">${fmt(r.reward)}</span></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const now = new Date();
+  const ts  = `${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+  document.getElementById('print-area').innerHTML = `
+    <div style="font-family:'Hiragino Sans','Yu Gothic UI',sans-serif;color:#1a1a1a;padding:0">
+      <div style="border-bottom:2px solid #1a1a1a;padding-bottom:12px;margin-bottom:18px">
+        <div style="font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:#999;margin-bottom:4px">Event Reward Report</div>
+        <div style="font-size:20px;font-weight:700">${name}</div>
+      </div>
+      ${body}
+      <div style="background:#e8f0ea;border:1.5px solid #3a6b4a;border-radius:2px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+        <b style="color:#3a6b4a;font-size:13px">全日程 報酬金合計</b>
+        <span style="font-family:monospace;font-size:22px;font-weight:700;color:#3a6b4a">${fmt(total)}</span>
+      </div>
+      <div style="margin-top:12px;font-size:9px;color:#bbb;text-align:right">出力日時：${ts}</div>
+    </div>
+  `;
+  window.print();
+}
+
+function resetAll() {
+  if (!confirm('全てリセットしますか？')) return;
+  document.getElementById('event-name').value = '';
+  document.getElementById('days-wrap').innerHTML = '';
+  Object.keys(days).forEach(k => delete days[k]);
+  dayCount = 0;
+  document.getElementById('img-preview').classList.remove('show');
+  window._imgDataUrl = null;
+  recalcSummary();
+  addDay();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// init
+addDay();
+</script>
+</body>
+</html>
